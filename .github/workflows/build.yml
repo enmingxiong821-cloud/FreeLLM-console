@@ -1,0 +1,46 @@
+name: Build desktop packages
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: win
+          - os: macos-latest
+            target: mac
+          - os: ubuntu-latest
+            target: linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install Linux packaging tools
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y rpm fakeroot
+      - name: Install dependencies
+        run: npm ci
+      - name: Verify
+        run: npm test
+      - name: Stage runtime and router
+        run: |
+          npm run sync:router
+          npm run stage:runtime
+      - name: Stage sanitized core
+        run: npm run stage:release-core
+      - name: Build
+        run: npx electron-builder --${{ matrix.target }} --publish never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: freellm-console-${{ matrix.target }}
+          path: dist/**

@@ -1,0 +1,36 @@
+{
+  "name": "freellm-console",
+  "productName": "FreeLLM Console",
+  "version": "0.2.0",
+  "description": "FreeLLM 桌面控制台：一键配置、服务托管与跨平台接入",
+  "private": true,
+  "type": "module",
+  "main": "src/main.js",
+  "author": "Enming Xiong <enmingxiong821@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/enmingxiong821-cloud/FreeLLM-console.git"
+  },
+  "homepage": "https://github.com/enmingxiong821-cloud/FreeLLM-console",
+  "bugs": {
+    "url": "https://github.com/enmingxiong821-cloud/FreeLLM-console/issues"
+  },
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "sync:router": "node scripts/sync-router.mjs",
+    "stage:core": "node scripts/stage-core.mjs",
+    "stage:release-core": "node scripts/stage-release-core.mjs",
+    "pack:win": "npm run sync:router && node scripts/pack-portable.mjs",
+    "test": "node --test test/core.test.js",
+    "stage:runtime": "node scripts/stage-runtime.mjs",
+    "dist:win": "npm run sync:router && npm run stage:release-core && electron-builder --win --x64 --publish never",
+    "dist:mac": "npm run sync:router && npm run stage:release-core && electron-builder --mac --publish never",
+    "dist:linux": "npm run sync:router && npm run stage:release-core && electron-builder --linux --publish never"
+  },
+  "devDependencies": {
+    "electron": "38.8.6",
+    "electron-builder": "25.1.8"
+  }
+}

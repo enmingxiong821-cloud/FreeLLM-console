@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:; connect-src 'none';" />
+  <title>FreeLLM Console</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <canvas id="ambient" aria-hidden="true"></canvas>
+  <div id="onboarding" class="onboarding" hidden>
+    <div class="onboard-shell">
+      <header class="onboard-head">
+        <div class="mark mark-lg" aria-hidden="true">
+          <span></span><span></span><span></span>
+        </div>
+        <div>
+          <p class="eyebrow">FreeLLM Console</p>
+          <h1>把免费模型接成一台机器</h1>
+        </div>
+        <div class="onboard-progress" id="onboardProgress"></div>
+      </header>
+      <section class="onboard-body" id="onboardBody"></section>
+      <footer class="onboard-foot">
+        <button class="btn quiet" id="onboardBack">上一步</button>
+        <div class="foot-note" id="onboardNote">所有配置只保存在这台电脑上</div>
+        <button class="btn primary" id="onboardNext">继续</button>
+      </footer>
+    </div>
+  </div>
+
+  <div class="shell" id="shell">
+    <aside class="side">
+      <div class="side-brand">
+        <div class="mark" aria-hidden="true">
+          <span></span><span></span><span></span>
+        </div>
+        <div class="side-brand-text">
+          <strong>FreeLLM</strong>
+          <span>CONSOLE</span>
+        </div>
+      </div>
+
+      <nav class="nav" id="nav">
+        <button class="nav-item is-active" data-view="overview"><span class="nav-glyph">◫</span><span>总览</span><em>01</em></button>
+        <button class="nav-item" data-view="connect"><span class="nav-glyph">⌘</span><span>软件接入</span><em>02</em></button>
+        <button class="nav-item" data-view="models"><span class="nav-glyph">◇</span><span>模型库</span><em>03</em></button>
+        <button class="nav-item" data-view="share"><span class="nav-glyph">↗</span><span>分享与公网</span><em>04</em></button>
+        <button class="nav-item" data-view="settings"><span class="nav-glyph">⚙</span><span>设置与日志</span><em>05</em></button>
+        <button class="nav-item" data-view="workbench"><span class="nav-glyph">▣</span><span>Pi 工作台</span><em>06</em></button>
+        <button class="nav-item" data-view="localmodels"><span class="nav-glyph">◈</span><span>开源模型</span><em>07</em></button>
+      </nav>
+
+      <div class="side-foot">
+        <button class="side-settings" id="sideSettings">
+          <span class="nav-glyph">⚙</span>
+          <span>设置</span>
+          <em>Ctrl ,</em>
+        </button>
+        <div class="mini-status" id="sideStatus">
+          <span class="dot"></span>
+          <div><b>正在连接</b><span>本机服务</span></div>
+        </div>
+        <div class="side-version" id="sideVersion">v—</div>
+      </div>
+    </aside>
+
+    <div class="stage">
+      <header class="topline">
+        <div class="view-heading">
+          <p class="eyebrow" id="viewKicker">CONTROL DESK</p>
+          <h1 id="viewTitle">总览</h1>
+        </div>
+
+        <div class="route-map" id="routeMap" aria-label="请求路径状态">
+          <div class="route-node" data-node="clients">
+            <span class="route-dot"></span>
+            <b>客户端</b>
+            <small id="clientCount">—</small>
+          </div>
+          <span class="route-line"><i class="pulse"></i></span>
+          <div class="route-node" data-node="gateway">
+            <span class="route-dot"></span>
+            <b>统一网关</b>
+            <small id="gatewayPort">:3001</small>
+          </div>
+          <span class="route-line"><i class="pulse"></i></span>
+          <div class="route-node" data-node="router">
+            <span class="route-dot"></span>
+            <b>任务路由</b>
+            <small id="routerPort">:3002</small>
+          </div>
+          <span class="route-line split"></span>
+          <div class="route-fork">
+            <div class="route-node small" data-node="cloud">
+              <span class="route-dot amber"></span>
+              <b>云端</b>
+              <small id="cloudCount">—</small>
+            </div>
+            <div class="route-node small" data-node="local">
+              <span class="route-dot mint"></span>
+              <b>本机</b>
+              <small id="localCount">—</small>
+            </div>
+          </div>
+        </div>
+
+        <div class="top-actions">
+          <button class="tag" id="modelBadge" title="打开模型控制">AUTO</button>
+          <button class="icon-btn" id="commandBtn" title="快捷命令 (Ctrl+K)" aria-label="快捷命令">⌘</button>
+          <button class="icon-btn" id="refreshBtn" title="刷新状态">↻</button>
+          <button class="btn primary" id="powerBtn"><span class="power-dot"></span>启动全部</button>
+        </div>
+      </header>
+
+      <main class="view" id="viewRoot"></main>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <div class="modal" id="modal" hidden>
+    <div class="modal-card">
+      <header>
+        <h2 id="modalTitle">配置片段</h2>
+        <button class="icon-btn" id="modalClose" aria-label="关闭">×</button>
+      </header>
+      <pre id="modalBody"></pre>
+      <footer>
+        <button class="btn" id="modalCopy">复制</button>
+      </footer>
+    </div>
+  </div>
+
+  <div class="palette" id="palette" hidden>
+    <div class="palette-card" role="dialog" aria-modal="true" aria-label="快捷命令">
+      <div class="palette-search">
+        <span class="palette-key">⌘K</span>
+        <input id="paletteInput" placeholder="搜索命令：启动、模型、设置、朋友页…" autocomplete="off" />
+        <button class="btn small quiet" id="paletteClose">Esc</button>
+      </div>
+      <div class="palette-list" id="paletteList"></div>
+      <div class="palette-foot"><span>↑↓ 选择</span><span>Enter 执行</span><span>Esc 关闭</span></div>
+    </div>
+  </div>
+
+  <script src="./app.js" type="module"></script>
+</body>
+</html>
