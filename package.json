@@ -30,7 +30,12 @@
     "dist:linux": "npm run sync:router && npm run stage:release-core && electron-builder --linux --publish never"
   },
   "devDependencies": {
+    "better-sqlite3": "12.10.0",
     "electron": "38.8.6",
     "electron-builder": "25.1.8"
+  },
+  "allowScripts": {
+    "better-sqlite3@12.10.0": true,
+    "electron@38.8.6": true
   }
 }

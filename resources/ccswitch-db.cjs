@@ -19,8 +19,12 @@ const core = process.env.FREELLM_CORE || path.resolve(__dirname, 'core');
 let Database;
 try {
   Database = require(path.join(core, 'node_modules', 'better-sqlite3'));
-} catch (error) {
-  fail(`better-sqlite3 unavailable: ${error.message}`);
+} catch (bundledError) {
+  try {
+    Database = require('better-sqlite3');
+  } catch (fallbackError) {
+    fail(`better-sqlite3 unavailable: ${bundledError.message}; ${fallbackError.message}`);
+  }
 }
 
 if (!payload?.dbPath || !Array.isArray(payload.providers)) {
