@@ -136,9 +136,13 @@ test('CC Switch merge keeps existing providers and adds three FreeLLM entries', 
   assert.equal(cfg.claude.current, 'other');
 });
 
-test('CC Switch v3 database receives Claude and Codex providers', () => {
+const bundledSqlite = path.resolve('resources/core/node_modules/better-sqlite3');
+
+test('CC Switch v3 database receives Claude and Codex providers', {
+  skip: fs.existsSync(bundledSqlite) ? false : 'bundled core is not present in this checkout',
+}, () => {
   const require = createRequire(import.meta.url);
-  const Database = require('../resources/core/node_modules/better-sqlite3');
+  const Database = require(bundledSqlite);
   const home = tempDir();
   const dir = path.join(home, '.cc-switch');
   fs.mkdirSync(dir, { recursive: true });
