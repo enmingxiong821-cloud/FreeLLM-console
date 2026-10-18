@@ -1,5 +1,7 @@
 # FreeLLM Console
 
+[![Build desktop packages](https://github.com/enmingxiong821-cloud/FreeLLM-console/actions/workflows/build.yml/badge.svg)](https://github.com/enmingxiong821-cloud/FreeLLM-console/actions/workflows/build.yml)
+
 把原来的浏览器控制台做成桌面软件：开机就能用，一键启动网关与路由，一键写入 Codex / Claude Code / CC Switch / EchoBird / Continue，并把 Key、公网和日志收在同一个窗口里。
 
 当前版本：**0.3.0**。发布包与变更记录见 [GitHub Releases](https://github.com/enmingxiong821-cloud/FreeLLM-console/releases)。
