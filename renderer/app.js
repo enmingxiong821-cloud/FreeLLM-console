@@ -17,6 +17,10 @@ let connectCategory = '全部';
 let connectStatus = 'all';
 let quotaState = null;
 let quotaLoading = false;
+let usageState = null;
+let usageLoading = false;
+let usageLoadedAt = 0;
+let speedState = {};
 let backupState = null;
 let workbenchState = null;
 let localModelFilter = 'all';
@@ -334,7 +338,7 @@ function renderChrome() {
   const live = allRunning();
   const side = $('#sideStatus');
   side.innerHTML = `<span class="dot ${live ? 'ok live' : ''}"></span><div><b>${live ? '网关在线' : '等待启动'}</b><span>${live ? '本机服务正常' : '服务未全部运行'}</span></div>`;
-  $('#sideVersion').textContent = `v${appState.app?.version || '0.2.0'} · ${appState.app?.platform || ''}`;
+  $('#sideVersion').textContent = `v${appState.app?.version || '0.3.0'} · ${appState.app?.platform || ''}`;
   const modelMode = cfg.modelMode === 'manual' ? 'manual' : 'auto';
   const badge = $('#modelBadge');
   badge.textContent = modelMode === 'auto'
@@ -508,6 +512,9 @@ function renderOverview() {
     <div class="section-head"><div><h2>免费额度</h2><p>从网关实时读取各平台的免费池；未上报的池会显示“未知”。</p></div><button class="btn small" id="refreshQuota">刷新额度</button></div>
     <div class="panel quota-panel" id="quotaPanel">${renderQuotaPanel()}</div>
 
+    <div class="section-head"><div><h2>今日用量</h2><p>来自本机路由日志，只统计任务、模型、状态和耗时，不读取提示词正文。</p></div><button class="btn small" id="refreshUsage">刷新用量</button></div>
+    <div class="panel usage-panel" id="usagePanel">${renderUsagePanel()}</div>
+
     <div class="section-head"><div><h2>四步开始</h2><p>从空电脑到第一个请求，正常不超过十分钟。</p></div></div>
     <div class="steps">
       <div class="step ${stepDone[0] ? 'is-done' : ''}"><div class="num">01 / CORE</div><h3>选安装目录</h3><p>${appState.core?.exists ? '已找到 FreeLLMAPI' : '选择包含 server/dist 的目录'}</p></div>
@@ -534,7 +541,12 @@ function renderOverview() {
   $('#heroTest').onclick = () => { switchView('models'); setTimeout(runTest, 60); };
   $('#refreshServices').onclick = refresh;
   $('#refreshQuota').onclick = () => loadQuotas(true);
+  $('#refreshUsage').onclick = () => loadUsage(true);
   if (!quotaState && !quotaLoading) loadQuotas(false);
+  if ((!usageState || Date.now() - usageLoadedAt > 15000) && !usageLoading) loadUsage(false);
+  $$('[data-copy-usage-model]').forEach((button) => {
+    button.onclick = () => copy(button.dataset.copyUsageModel, '模型名已复制');
+  });
   $$('[data-service]').forEach((button) => {
     button.onclick = async () => {
       const { service, action } = button.dataset;
@@ -598,6 +610,56 @@ async function loadQuotas(force) {
   const panel = $('#quotaPanel');
   if (panel) panel.innerHTML = renderQuotaPanel();
   if (force) toast(quotaState.ok ? '额度已刷新' : quotaState.error, !quotaState.ok);
+}
+
+function renderUsagePanel() {
+  if (usageLoading && !usageState) {
+    return '<div style="padding:16px;color:var(--faint);font-size:11px">正在读取本机路由日志…</div>';
+  }
+  if (!usageState) {
+    return '<div style="padding:16px;color:var(--faint);font-size:11px">还没有用量数据。启动服务并发一次请求后，这里会自动统计。</div>';
+  }
+  if (!usageState.ok) {
+    return `<div style="padding:16px;color:var(--coral);font-size:11px">${esc(usageState.error || '读取失败')}</div>`;
+  }
+  const hourly = usageState.hourly || Array(24).fill(0);
+  const max = Math.max(1, ...hourly);
+  const models = usageState.models || [];
+  return `<div class="usage-summary">
+      <div><span>今日请求</span><b>${usageState.total || 0}</b></div>
+      <div><span>成功率</span><b>${usageState.total ? `${usageState.successRate}%` : '—'}</b></div>
+      <div><span>平均耗时</span><b>${usageState.total ? `${usageState.avgMs} ms` : '—'}</b></div>
+      <div><span>最近请求</span><b>${usageState.lastAt ? new Date(usageState.lastAt).toLocaleTimeString() : '—'}</b></div>
+    </div>
+    <div class="usage-body">
+      <div class="usage-chart">
+        <div class="usage-chart-head"><span>24 小时分布</span><em>${esc(usageState.date || '')}</em></div>
+        <div class="usage-bars">${hourly.map((count, hour) => `<i style="height:${Math.max(4, count / max * 100)}%" title="${hour}:00 · ${count} 次" class="${count ? 'has-data' : ''}"></i>`).join('')}</div>
+        <div class="usage-hours"><span>00</span><span>06</span><span>12</span><span>18</span><span>23</span></div>
+      </div>
+      <div class="usage-models">
+        <div class="usage-chart-head"><span>常用模型</span><em>点击模型名可复制</em></div>
+        ${models.length ? models.map((model) => `<button class="usage-model-row" data-copy-usage-model="${esc(model.id)}"><b>${esc(model.id)}</b><span>${model.count} 次 · ${model.avgMs} ms${model.errors ? ` · ${model.errors} 失败` : ''}</span></button>`).join('') : '<div class="usage-empty">今天还没有成功的路由记录。</div>'}
+      </div>
+    </div>`;
+}
+
+async function loadUsage(force) {
+  if (usageLoading) return;
+  usageLoading = true;
+  if (force) {
+    const panel = $('#usagePanel');
+    if (panel) panel.innerHTML = '<div style="padding:16px;color:var(--faint);font-size:11px">正在读取本机路由日志…</div>';
+  }
+  usageState = await window.freeLLM.usage();
+  usageLoadedAt = Date.now();
+  usageLoading = false;
+  const panel = $('#usagePanel');
+  if (panel) panel.innerHTML = renderUsagePanel();
+  $$('[data-copy-usage-model]').forEach((button) => {
+    button.onclick = () => copy(button.dataset.copyUsageModel, '模型名已复制');
+  });
+  if (force) toast(usageState.ok ? '用量已刷新' : usageState.error, !usageState.ok);
 }
 
 function appCard(app) {
@@ -844,7 +906,10 @@ function renderModels() {
         <div class="model-tags">${model.usableNow !== false ? '' : '<span class="tag coral">未启用</span>'}${(model.tags || []).slice(0, 3).map((tag) => `<span class="tag ${tag === '本地' ? 'mint' : ''}">${esc(tag)}</span>`).join('')}</div>
         <div class="model-desc">${esc(model.strengths || model.platform || '')}</div>
         <div class="rank">智 <b>${model.intelligenceRank || '—'}</b> / 速 <b>${model.speedRank || '—'}</b></div>
-        <div class="rank">${model.contextWindow ? `${Math.round(model.contextWindow / 1000)}K` : '—'}</div>
+        <div class="model-side">
+          <div class="rank">${model.contextWindow ? `${Math.round(model.contextWindow / 1000)}K` : '—'}</div>
+          <button class="mini-speed ${speedState[model.id]?.ok ? 'is-ok' : speedState[model.id] ? 'is-bad' : ''}" data-speed-model="${esc(model.id)}">${speedState[model.id] ? (speedState[model.id].ok ? `${speedState[model.id].ms}ms` : '失败') : '测速'}</button>
+        </div>
       </div>`).join('') || '<div style="padding:30px;text-align:center;color:var(--faint)">没有匹配的模型</div>'}
     </div>
 
@@ -855,7 +920,7 @@ function renderModels() {
             .map((id) => `<option value="${id}" ${lastTest?.model === id ? 'selected' : ''}>${id}</option>`).join('')}
         </select></div>
         <div><label for="testPrompt">提示词</label><textarea id="testPrompt">${esc(appState.config.lastRoute?.prompt || '帮我审查这段 TypeScript 代码，找边界条件问题')}</textarea></div>
-        <div style="display:flex;gap:8px"><button class="btn primary" id="runTest">发送测试</button><button class="btn" id="pinTestModel">设为固定</button><button class="btn" id="testPrivacy">测试隐私拦截</button></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" id="runTest">发送测试</button><button class="btn" id="speedTestModel">测速当前</button><button class="btn" id="pinTestModel">设为固定</button><button class="btn" id="testPrivacy">测试隐私拦截</button></div>
       </div>
       <pre class="test-result" id="testResult">${esc(lastTest ? formatTest(lastTest) : '尚未测试。\n\n点击“发送测试”会走一次真实的 /v1 请求，并显示路由器最终选了哪个模型。')}</pre>
     </div>
@@ -907,7 +972,14 @@ function renderModels() {
       toast(`已选择 ${id}`);
     };
   });
+  $$('[data-speed-model]').forEach((button) => {
+    button.onclick = async (event) => {
+      event.stopPropagation();
+      await runSpeed(button.dataset.speedModel, button);
+    };
+  });
   $('#runTest').onclick = runTest;
+  $('#speedTestModel').onclick = () => runSpeed($('#testModel').value);
   $('#pinTestModel').onclick = async () => {
     const model = $('#testModel').value;
     const result = await window.freeLLM.setModel({ mode: 'manual', model });
@@ -929,6 +1001,27 @@ function formatTest(result) {
     '',
     result.content || '',
   ].join('\n');
+}
+
+async function runSpeed(model, button) {
+  if (!model) return toast('先选择一个模型', true);
+  if (button) {
+    button.disabled = true;
+    button.textContent = '测速中';
+  }
+  const result = await window.freeLLM.speedTest({ model });
+  speedState[model] = result;
+  if (button) {
+    button.disabled = false;
+    button.textContent = result.ok ? `${result.ms}ms` : '失败';
+    button.classList.toggle('is-ok', Boolean(result.ok));
+    button.classList.toggle('is-bad', !result.ok);
+    button.title = result.ok
+      ? `${model} · HTTP ${result.status} · ${result.ms} ms`
+      : `${model} · ${result.error || `HTTP ${result.status}`}`;
+  }
+  toast(result.ok ? `${model} · ${result.ms} ms` : `${model}：${result.error || `HTTP ${result.status}`}`, !result.ok);
+  return result;
 }
 
 async function runTest() {
@@ -1176,7 +1269,7 @@ function renderSettings() {
             <b>${esc(local.privacyModel || local.recommendation?.model || '跟随系统建议')}</b>
             <span>${esc(local.recommendation?.detail || '敏感内容命中后会强制使用这个本地模型。')}</span>
             <select class="model-select" id="privacyModelSelect" style="width:100%;margin-top:10px">
-              <option value="">跟随系统建议${local.recommendation?.model ? `（${esc(local.recommendation.model)}）` : ''}</option>
+              <option value="">跟随系统建议${local.recommendation?.model ? `（${esc(local.recommendation.model)}${local.recommendation.installed === false ? ' · 未安装' : ''}）` : ''}</option>
               ${(local.models || []).map((model) => `<option value="${esc(model.name)}" ${local.privacyModel === model.name ? 'selected' : ''}>${esc(model.name)} · ${model.sizeGB} GB</option>`).join('')}
               ${local.privacyModel && !(local.models || []).some((model) => model.name === local.privacyModel) ? `<option value="${esc(local.privacyModel)}" selected>${esc(local.privacyModel)}（自定义）</option>` : ''}
             </select>
@@ -1187,6 +1280,7 @@ function renderSettings() {
             </div>
             <div class="local-actions">
               <button class="btn small ${appState.services.ollama?.running ? '' : 'primary'}" id="startOllama">${appState.services.ollama?.running ? '停止 Ollama' : '启动 Ollama'}</button>
+              <button class="btn small" id="repairOllama">一键修复</button>
               <button class="btn small" id="saveLocal">保存并重启</button>
             </div>
           </div>
@@ -1229,7 +1323,7 @@ function renderSettings() {
         <div class="local-block" style="margin-top:12px">
           <p class="eyebrow">已安装模型</p>
           <div class="local-models">
-            ${(local.models || []).length ? local.models.map((model) => `<div class="local-model"><b>${esc(model.name)}</b><span>${model.sizeGB} GB</span><button class="btn small quiet" data-use-privacy="${esc(model.name)}">设为隐私兜底</button></div>`).join('') : '<span style="color:var(--faint);font-size:11px">还没有已下载模型，或 Ollama 未启动。</span>'}
+            ${(local.models || []).length ? local.models.map((model) => `<div class="local-model"><b>${esc(model.name)}</b><span>${model.sizeGB} GB</span><div style="display:flex;gap:5px"><button class="btn small quiet" data-warm-model="${esc(model.name)}">预热</button><button class="btn small quiet" data-use-privacy="${esc(model.name)}">设为隐私兜底</button></div></div>`).join('') : '<span style="color:var(--faint);font-size:11px">还没有已下载模型，或 Ollama 未启动。</span>'}
           </div>
         </div>
       </div>
@@ -1260,7 +1354,7 @@ function renderSettings() {
 
     <div class="section-head" id="sec-logs"><div><h2>日志</h2><p>只记录任务、模型、状态、耗时与隐私原因，不记录提示词正文。</p></div>
       <div style="display:flex;gap:6px">
-        ${['router', 'server', 'ollama', 'tunnel'].map((name) => `<button class="chip ${logTab === name ? 'is-on' : ''}" data-log="${name}">${name}</button>`).join('')}
+        ${['router', 'server', 'ollama', 'tunnel', 'renderer'].map((name) => `<button class="chip ${logTab === name ? 'is-on' : ''}" data-log="${name}">${name === 'renderer' ? '界面' : name}</button>`).join('')}
         <button class="btn small" id="refreshLog">刷新</button>
       </div>
     </div>
@@ -1450,6 +1544,20 @@ function renderSettings() {
   $('#startOllama').onclick = async () => {
     const result = await window.freeLLM.service('ollama', appState.services.ollama?.running ? 'stop' : 'start');
     toast(result.ok ? 'Ollama 状态已更新' : result.error, !result.ok);
+    await refresh();
+  };
+  $('#repairOllama').onclick = async () => {
+    const button = $('#repairOllama');
+    button.disabled = true;
+    toast('正在检查 Ollama 路径、模型目录与服务…');
+    const result = await window.freeLLM.repairOllama();
+    if (!result.ok) {
+      toast(result.error, true);
+      if (result.installUrl) window.freeLLM.openExternal(result.installUrl).catch(() => {});
+    } else {
+      toast(`Ollama 已修复${result.version ? ` · ${result.version}` : ''} · ${result.count || 0} 个模型`, false);
+    }
+    button.disabled = false;
     await refresh();
   };
   const collectLocal = () => ({
@@ -1748,6 +1856,17 @@ function renderLocalModels() {
       await refresh();
     };
   });
+  $$('[data-warm-model]').forEach((button) => {
+    button.onclick = async () => {
+      const model = button.dataset.warmModel;
+      button.disabled = true;
+      button.textContent = '预热中';
+      const result = await window.freeLLM.warmModel(model);
+      button.disabled = false;
+      button.textContent = '预热';
+      toast(result.ok ? `${model} 已预热 · ${result.ms} ms` : (result.hint || result.error || '预热失败'), !result.ok);
+    };
+  });
 }
 
 function renderBackupPanel() {
@@ -1804,6 +1923,7 @@ function switchView(view) {
     $('#viewRoot').removeEventListener('scroll', settingsScrollHandler);
     settingsScrollHandler = null;
   }
+  if (view === 'overview') usageLoadedAt = 0;
   currentView = view;
   renderView(true);
   $('#viewRoot').scrollTop = 0;
@@ -2138,6 +2258,29 @@ async function boot() {
   }
 }
 
+function reportRendererError(payload) {
+  try {
+    window.freeLLM?.reportError?.(payload);
+  } catch {}
+}
+
+window.addEventListener('error', (event) => {
+  reportRendererError({
+    message: event.message || 'renderer error',
+    stack: event.error?.stack || '',
+    source: event.filename ? `${event.filename}:${event.lineno || 0}` : '',
+  });
+});
+
+window.addEventListener('unhandledrejection', (event) => {
+  const reason = event.reason;
+  reportRendererError({
+    message: reason?.message || String(reason || 'unhandled rejection'),
+    stack: reason?.stack || '',
+  });
+});
+
 boot().catch((error) => {
+  reportRendererError({ message: error.message, stack: error.stack || '' });
   document.body.innerHTML = `<div style="padding:40px;color:#ef7d6d;font-family:monospace">控制台启动失败：${esc(error.message)}</div>`;
 });

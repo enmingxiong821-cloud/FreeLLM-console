@@ -343,11 +343,19 @@ function registerIpc() {
     return result;
   }));
   ipcMain.handle('app:test-route', wrap((_event, payload) => state.testRoute(payload || {})));
+  ipcMain.handle('app:speed-test', wrap((_event, payload) => state.speedTest(payload || {})));
+  ipcMain.handle('app:usage', wrap(() => state.usageStats()));
   ipcMain.handle('app:quotas', wrap(() => state.quotas()));
   ipcMain.handle('app:sync-catalog', wrap(() => state.syncCatalog()));
   ipcMain.handle('app:add-module', wrap((_event, input) => state.addModule(input)));
   ipcMain.handle('app:remove-module', wrap((_event, id) => state.removeModule(String(id))));
   ipcMain.handle('app:pull-model', wrap((_event, model) => services.pullModel(model)));
+  ipcMain.handle('app:warm-model', wrap((_event, model) => services.warmModel(String(model || ''))));
+  ipcMain.handle('app:repair-ollama', wrap(async () => {
+    const result = await services.repairOllama();
+    await broadcastState();
+    return result;
+  }));
   ipcMain.handle('app:set-model', wrap((_event, payload) => {
     const result = state.setModel(payload || {});
     broadcastState();
@@ -571,6 +579,17 @@ function registerIpc() {
   }));
   ipcMain.handle('app:open-path', wrap((_event, target) => shell.openPath(String(target || ''))));
   ipcMain.handle('app:logs', wrap((_event, name, lines) => services.logs(String(name || 'router'), Number(lines) || 160)));
+  ipcMain.handle('app:renderer-error', wrap((_event, payload) => {
+    const file = path.join(store.layout.logDir, 'renderer.log');
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.appendFileSync(file, `${JSON.stringify({
+      ts: new Date().toISOString(),
+      message: String(payload?.message || '').slice(0, 1000),
+      stack: String(payload?.stack || '').slice(0, 4000),
+      source: String(payload?.source || '').slice(0, 500),
+    })}\n`, 'utf8');
+    return { ok: true };
+  }));
   ipcMain.handle('app:onboarding', wrap(async (_event, payload) => {
     const patch = {
       onboardingComplete: true,

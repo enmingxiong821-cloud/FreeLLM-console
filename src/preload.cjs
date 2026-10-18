@@ -7,11 +7,15 @@ contextBridge.exposeInMainWorld('freeLLM', {
   stopAll: () => ipcRenderer.invoke('app:stop-all'),
   service: (name, action) => ipcRenderer.invoke('app:service', name, action),
   testRoute: (payload) => ipcRenderer.invoke('app:test-route', payload),
+  speedTest: (payload) => ipcRenderer.invoke('app:speed-test', payload),
+  usage: () => ipcRenderer.invoke('app:usage'),
   quotas: () => ipcRenderer.invoke('app:quotas'),
   syncCatalog: () => ipcRenderer.invoke('app:sync-catalog'),
   addModule: (input) => ipcRenderer.invoke('app:add-module', input),
   removeModule: (id) => ipcRenderer.invoke('app:remove-module', id),
   pullModel: (model) => ipcRenderer.invoke('app:pull-model', model),
+  warmModel: (model) => ipcRenderer.invoke('app:warm-model', model),
+  repairOllama: () => ipcRenderer.invoke('app:repair-ollama'),
   setModel: (payload) => ipcRenderer.invoke('app:set-model', payload),
   backups: () => ipcRenderer.invoke('app:backups'),
   restoreBackup: (payload) => ipcRenderer.invoke('app:restore-backup', payload),
@@ -43,6 +47,7 @@ contextBridge.exposeInMainWorld('freeLLM', {
   openMailto: (url) => ipcRenderer.invoke('app:open-mailto', url),
   openPath: (target) => ipcRenderer.invoke('app:open-path', target),
   logs: (name, lines) => ipcRenderer.invoke('app:logs', name, lines),
+  reportError: (payload) => ipcRenderer.invoke('app:renderer-error', payload),
   onboarding: (payload) => ipcRenderer.invoke('app:onboarding', payload),
   onState: (callback) => {
     const listener = (_event, value) => callback(value);

@@ -2,7 +2,7 @@
 
 把原来的浏览器控制台做成桌面软件：开机就能用，一键启动网关与路由，一键写入 Codex / Claude Code / CC Switch / EchoBird / Continue，并把 Key、公网和日志收在同一个窗口里。
 
-当前版本：**0.2.0**。发布包与变更记录见 [GitHub Releases](https://github.com/enmingxiong821-cloud/FreeLLM-console/releases)。
+当前版本：**0.3.0**。发布包与变更记录见 [GitHub Releases](https://github.com/enmingxiong821-cloud/FreeLLM-console/releases)。
 
 ![总览](assets/screenshot-overview.png)
 
@@ -22,14 +22,18 @@
 - **公网开关**：Cloudflare 临时隧道默认关闭，只转发路由的 `/v1` 与 `/health`。
 - **朋友入口**：新增只读 `/share/<token>` 页面，朋友可打开看连接信息、模型列表并复制 Friend Key；不含管理后台。公网开启后链接自动变成 `https://…/share/…`，也可以开局域网访问。
 - **模型库与额度**：显示 15 个当前可用模型，也可以切到全部 366 个目录；从网关联动拉取免费池额度，并支持手动同步签名目录。
+- **今日用量**：从本机路由日志统计今日请求、成功率、平均耗时、24 小时分布和常用模型；不读取提示词正文。
+- **模型测速**：模型列表每行可单独发一次最小请求，直接显示毫秒数；失败会保留 HTTP 状态。
 - **44 个开源本地模型**：独立“开源模型”页，按中文/代码/推理/视觉/轻量/工具筛选，每张卡写明擅长、弱项、参数、体积、许可证和 Ollama 标签。
 - **闭源 API 快捷添加**：内置 OpenAI、Claude、Gemini、DeepSeek、Kimi、GLM、Qwen、Doubao、SiliconFlow、OpenRouter 等 12 个预设；填 Key 即可生成配置，Key 只进本地 secrets，不写配置、不进日志。
 - **免费模型源与同类项目**：内置 16 个常见免费额度入口（OpenRouter、Groq、Google AI Studio、ModelScope、SiliconFlow 等）和 13 个同类项目对照。
 - **本机部署**：自动识别 `D:\Ollama`、已下载模型和推荐规格；支持启动/停止 Ollama、下载推荐模型或自定义标签。
+- **Ollama 修复与预热**：一键检查路径、模型目录和服务；已安装模型可单独预热，显存不足时返回明确提示，不静默失败。
 - **可定制本地部署**：隐私兜底模型、省内存/均衡/质量策略、端口、上下文、并发、常驻时间、模型目录与 Ollama 路径都可改。
 - **个性化**：深色/浅色/跟随系统、四种强调色、语言入口（中文 / 双语 / English 预览）。
 - **设置重构**：常规 / 外观 / 本机部署 / 数据与还原 / 日志 / 资料与生态 / 关于与反馈；免费模型源和同类项目收进设置。
 - **版本与反馈**：显示应用、Electron、Node、平台、目录；可复制版本信息、诊断信息、反馈模板；内置作者邮箱、QQ、微信和群号填写位。
+- **本地错误日志**：界面异常写入 `logs/renderer.log`，只保存在本机，不上传。
 - **动效**：粒子信号场、指针跟随高光、页面转场与标题入场；尊重 `prefers-reduced-motion`。
 - **Pi 工作台**：可选页签，自动检测已安装的 Pi 工作台，可带最近项目启动、写入当前模型、打开 Pi 配置。
 - **左下角设置**：侧栏底部固定入口，也可以按 `Ctrl+,` 打开。
@@ -53,8 +57,8 @@ npm run pack:win
 
 输出：
 
-- `dist/FreeLLM-Console-0.2.0-win32-x64/`
-- `dist/FreeLLM-Console-0.2.0-win32-x64.zip`
+- `dist/FreeLLM-Console-0.3.0-win32-x64/`
+- `dist/FreeLLM-Console-0.3.0-win32-x64.zip`
 
 便携版的数据保存在程序目录的 `data/`，整个目录可以拷贝走。包内已经带 `resources/runtime/node.exe`，朋友的电脑不需要另装 Node。
 
@@ -121,6 +125,22 @@ Cline / Cherry 的按钮现在是“复制并打开”：先复制配置，再�
 ![开源模型库](assets/screenshot-open-models.png)
 
 “开源模型”页整理了 44 个常见可本地部署模型，按中文、代码、推理、视觉、轻量、工具调用筛选；每张卡写明擅长、弱项、参数、体积、许可证和 Ollama 标签。
+
+### 今日用量与模型测速
+
+![今日用量](assets/screenshot-usage.png)
+
+总览会从本机路由日志统计今日请求、成功率、平均耗时、24 小时分布和常用模型。日志只记录任务、模型、状态和耗时，不读取提示词正文。
+
+![模型测速](assets/screenshot-speed.png)
+
+模型库每行都有“测速”按钮，发一次最小请求即可看到毫秒数；失败时直接显示 HTTP 状态，方便判断是限流、模型不可用还是网络问题。
+
+### 本机部署与 Ollama
+
+![本机部署](assets/screenshot-local.png)
+
+“本机部署”支持一键修复 Ollama、预热模型、调整上下文/并发/常驻时间。显存不足时不会只显示“失败”，而会给出降低上下文或换 8B 模型的建议。
 
 ### 反馈
 
@@ -189,6 +209,6 @@ Anthropic Base URL: http://127.0.0.1:3002
 
 ## 下一轮建议
 
-1. 增加用量面板、模型测速、预热与一键修复 Ollama。
-2. 接入签名更新与崩溃上报（默认关闭）。
-3. 给 Cline / Cherry Studio 做更深的官方导入文件。
+1. 给 Cline / Cherry Studio 做更深的官方导入文件。
+2. 接入签名更新与可选的远程崩溃汇总（默认关闭）。
+3. 增加模型价格/额度提醒和定时测速。

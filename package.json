@@ -1,7 +1,7 @@
 {
   "name": "freellm-console",
   "productName": "FreeLLM Console",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "FreeLLM 桌面控制台：一键配置、服务托管与跨平台接入",
   "private": true,
   "type": "module",

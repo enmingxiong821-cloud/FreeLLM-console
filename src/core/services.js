@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { fetchJson, spawnLogged, stopProcess, commandPath, waitForHealth } from './process.js';
+import { fetchJson, run, spawnLogged, stopProcess, commandPath, waitForHealth } from './process.js';
 import { ensureDir, isWindows, resolveOllama } from './paths.js';
 import { restrictFile } from './store.js';
 import { friendKey as newFriendKey } from './keys.js';
@@ -362,8 +362,80 @@ export class ServiceManager {
     return { ok: true, model: name, pid: child.pid };
   }
 
+  async warmModel(model) {
+    const name = String(model || '').trim();
+    if (!/^[a-zA-Z0-9._:\/-]{2,120}$/.test(name)) throw new Error('模型名不合法');
+    if (!(await this.health('ollama'))) throw new Error('Ollama 未启动，先启动或一键修复。');
+    const started = Date.now();
+    const request = (numCtx) => fetchJson(`${this.url('ollama')}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: name,
+        prompt: ' ',
+        stream: false,
+        keep_alive: this.getConfig()?.local?.keepAlive || '10m',
+        options: { num_predict: 1, num_ctx: numCtx },
+      }),
+      timeout: 120000,
+    });
+    let result = await request(Number(this.getConfig()?.local?.context) || 16384);
+    let errorText = String(result.data?.error || result.text || '');
+    let fallbackContext = 0;
+    if (!result.ok && /out of memory|alloc|cuda/i.test(errorText)) {
+      fallbackContext = 4096;
+      result = await request(fallbackContext);
+      errorText = String(result.data?.error || result.text || '');
+    }
+    return {
+      ok: result.ok && !result.data?.error,
+      status: result.status,
+      ms: Date.now() - started,
+      model: name,
+      fallbackContext,
+      hint: /out of memory|alloc|cuda/i.test(errorText)
+        ? '显存不足：降低上下文、关闭占显存的程序，或换 8B 级模型。'
+        : '',
+      error: result.ok && !result.data?.error
+        ? ''
+        : (errorText.slice(0, 240) || `HTTP ${result.status}`),
+    };
+  }
+
+  async repairOllama() {
+    const local = this.getConfig()?.local || {};
+    const command = local.ollamaPath || resolveOllama() || commandPath('ollama');
+    if (!command) {
+      return {
+        ok: false,
+        error: '没有找到 Ollama。请先安装，或把 ollama 放到 D:\\Ollama。',
+        installUrl: 'https://ollama.com/download',
+      };
+    }
+    const modelsDir = local.modelsDir || path.join(path.dirname(command), 'models');
+    if (local.modelsDir && !fs.existsSync(local.modelsDir)) {
+      this.store.patchConfig({ local: { ...local, modelsDir: '' } });
+    }
+    await this.stop('ollama');
+    const started = await this.startOllama().catch((error) => ({ ok: false, error: error.message }));
+    if (!started.ok) {
+      return { ok: false, error: started.error || 'Ollama 启动失败', command, modelsDir };
+    }
+    const version = await run(command, ['--version'], { timeout: 5000 });
+    const tags = await fetchJson(`${this.url('ollama')}/api/tags`, { timeout: 5000 }).catch(() => null);
+    const models = (tags?.data?.models || []).map((item) => item.name).filter(Boolean);
+    return {
+      ok: true,
+      command,
+      modelsDir,
+      version: version.ok ? version.stdout.split(/\r?\n/)[0] : '',
+      count: models.length,
+      models: models.slice(0, 20),
+    };
+  }
+
   logs(name, lines = 160) {
-    const safe = ['server', 'router', 'ollama', 'ollama-pull', 'install', 'tunnel'].includes(name) ? name : 'router';
+    const safe = ['server', 'router', 'ollama', 'ollama-pull', 'install', 'tunnel', 'renderer'].includes(name) ? name : 'router';
     return tail(path.join(this.layout.logDir, `${safe}.log`), Math.min(600, Math.max(20, lines)));
   }
 

@@ -17,6 +17,7 @@ import { installCommand, installSpec } from '../src/core/installers.js';
 import { ShareServer } from '../src/core/shareServer.js';
 import { findFreePort } from '../src/core/ports.js';
 import { copyCoreSanitized, findReleaseLeaks, sanitizedConfig } from '../scripts/core-copy.mjs';
+import { AppState } from '../src/core/appState.js';
 
 function tempDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'freellm-console-test-'));
@@ -111,7 +112,9 @@ test('key helpers produce distinct prefixed tokens and mask safely', () => {
 
 test('hardware recommendation respects RAM and VRAM tiers', () => {
   assert.equal(recommendLocalModel({ ramGB: 4, gpu: [], diskGB: 100 }).level, 'none');
-  assert.equal(recommendLocalModel({ ramGB: 16, gpu: [{ vramGB: 0 }], diskGB: 100 }).model, 'qwen3:14b');
+  assert.equal(recommendLocalModel({ ramGB: 16, gpu: [{ vramGB: 0 }], diskGB: 100 }).model, 'qwen3:8b');
+  assert.equal(recommendLocalModel({ ramGB: 32, gpu: [{ vramGB: 10 }], diskGB: 100 }).model, 'qwen3:8b');
+  assert.equal(recommendLocalModel({ ramGB: 32, gpu: [{ vramGB: 12 }], diskGB: 100 }).model, 'qwen3:14b');
   assert.equal(recommendLocalModel({ ramGB: 32, gpu: [{ vramGB: 16 }], diskGB: 100 }).model, 'gpt-oss:20b');
   assert.equal(recommendLocalModel({ ramGB: 64, gpu: [{ vramGB: 24 }], diskGB: 100 }).model, 'qwen3:30b-a3b');
 });
@@ -335,6 +338,39 @@ test('sanitizedConfig never returns provider secrets', () => {
   fs.writeFileSync(file, JSON.stringify({ customProviders: [{ apiKey: 'sk-live', key: 'x', token: 'y' }] }));
   const config = sanitizedConfig(file);
   assert.deepEqual(config.customProviders[0], {});
+});
+
+test('usage stats aggregate today routes from the router log', async () => {
+  const logDir = tempDir();
+  const now = new Date().toISOString();
+  const old = new Date(Date.now() - 2 * 86400000).toISOString();
+  fs.writeFileSync(path.join(logDir, 'router-task.log'), [
+    JSON.stringify({ ts: now, chosen: 'model-a', task: 'code', status: 200, ms: 120 }),
+    JSON.stringify({ ts: now, chosen: 'model-a', task: 'code', status: 200, ms: 80 }),
+    JSON.stringify({ ts: now, chosen: 'model-b', task: 'office', status: 502, ms: 300 }),
+    JSON.stringify({ ts: old, chosen: 'model-c', task: 'code', status: 200, ms: 999 }),
+    'not-json',
+  ].join('\n'));
+  const state = new AppState({
+    layout: { logDir },
+    store: {},
+    services: {},
+    tunnel: {},
+    share: {},
+    system: null,
+    coreDir: '',
+    core: null,
+    appVersion: 'test',
+    resourcesPath: '',
+  });
+  const stats = await state.usageStats();
+  assert.equal(stats.total, 3);
+  assert.equal(stats.okCount, 2);
+  assert.equal(stats.errorCount, 1);
+  assert.equal(stats.successRate, 66.7);
+  assert.equal(stats.models[0].id, 'model-a');
+  assert.equal(stats.models[0].count, 2);
+  assert.equal(stats.models[0].avgMs, 100);
 });
 
 test('restore rejects a backup outside the managed target directory', () => {

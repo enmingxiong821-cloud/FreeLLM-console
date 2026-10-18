@@ -1,6 +1,6 @@
 # Third-party notices
 
-FreeLLM Console 0.2.0 bundles or depends on the following components. Their
+FreeLLM Console 0.3.0 bundles or depends on the following components. Their
 licenses remain in effect; this file records the attribution required for the
 release artifacts.
 

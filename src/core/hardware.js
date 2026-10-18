@@ -112,7 +112,7 @@ export function recommendLocalModel({ ramGB, gpu, diskGB }) {
       detail: '显存足够大。仍建议手动启用，自动路由不会主动加载 30B。',
     };
   }
-  if (ramGB >= 24 && vram >= 12) {
+  if (ramGB >= 24 && vram >= 14) {
     return {
       level: 'strong',
       model: 'gpt-oss:20b',
@@ -120,19 +120,21 @@ export function recommendLocalModel({ ramGB, gpu, diskGB }) {
       detail: '隐私请求的本地主力，速度和质量比较均衡。',
     };
   }
-  if (ramGB >= 16) {
+  if (ramGB >= 16 && vram >= 12) {
     return {
       level: 'balanced',
       model: 'qwen3:14b',
       title: '推荐 Qwen3 14B',
-      detail: '16GB 内存的稳妥选择；显存不足时会借用内存，速度会慢一些。',
+      detail: '内存和显存都够时选 14B；仍建议先测速，再决定是否常驻。',
     };
   }
   return {
     level: 'light',
     model: 'qwen3:8b',
     title: '推荐 Qwen3 8B',
-    detail: '小模型占用低，适合作为隐私兜底，不追求复杂推理。',
+    detail: ramGB >= 16
+      ? '显存低于 12GB 时优先 8B，避免加载 12B/14B 时显存不足。'
+      : '小模型占用低，适合作为隐私兜底，不追求复杂推理。',
   };
 }
 

@@ -101,21 +101,32 @@ export class AppState {
         detail: '优先低占用和快速启动；复杂任务仍可临时切到云端。',
       };
     } else if (recommendation && localConfig.profile === 'quality' && this.system.ramGB >= 24) {
-      const heavy = (this.system.gpu || []).some((gpu) => Number(gpu.vramGB) >= 20);
+      const vram = Math.max(0, ...(this.system.gpu || []).map((gpu) => Number(gpu.vramGB) || 0));
+      const heavy = vram >= 20;
+      const strong = vram >= 14;
       recommendation = {
         ...recommendation,
-        level: heavy ? 'heavy' : 'strong',
-        model: heavy ? 'qwen3:30b-a3b' : 'gpt-oss:20b',
+        level: heavy ? 'heavy' : (strong ? 'strong' : 'balanced'),
+        model: heavy ? 'qwen3:30b-a3b' : (strong ? 'gpt-oss:20b' : 'qwen3:14b'),
         title: '质量优先模式',
-        detail: heavy ? '显存足够时优先 30B；仍不会自动加载。' : '优先 20B，复杂代码和推理更稳。',
+        detail: heavy
+          ? '显存足够时优先 30B；仍不会自动加载。'
+          : strong
+            ? '优先 20B，复杂代码和推理更稳。'
+            : '显存低于 14GB 时优先 14B；加载前先预热，避免一次拉满。',
       };
     }
     if (recommendation?.model) {
       const installed = localModels.find((model) => model.name.startsWith(recommendation.model));
       if (installed) {
         recommendation.model = installed.name;
+        recommendation.installed = true;
         recommendation.title = `${recommendation.title} · 已安装`;
         recommendation.detail = `已下载 ${installed.name}（${installed.sizeGB} GB），可以直接在隐私请求里使用。`;
+      } else {
+        recommendation.installed = false;
+        recommendation.title = `${recommendation.title} · 未安装`;
+        recommendation.detail = `${recommendation.detail} 可在下方“常用模型”下载后再启用。`;
       }
     }
     return {
@@ -232,7 +243,7 @@ export class AppState {
     }
   }
 
-  async testRoute({ model = 'auto:code', prompt = '只回复 OK' } = {}) {
+  async testRoute({ model = 'auto:code', prompt = '只回复 OK', maxTokens = 96, timeout = 60000 } = {}) {
     const ctx = this.context();
     if (!ctx.ownerKey) throw new Error('统一 Key 尚未就绪，先启动全部服务。');
     const started = Date.now();
@@ -245,10 +256,10 @@ export class AppState {
       body: JSON.stringify({
         model,
         messages: [{ role: 'user', content: prompt }],
-        max_tokens: 96,
+        max_tokens: Math.min(512, Math.max(1, Number(maxTokens) || 96)),
         stream: false,
       }),
-      timeout: 60000,
+      timeout: Math.min(120000, Math.max(5000, Number(timeout) || 60000)),
     });
     const content = result.data?.choices?.[0]?.message?.content
       || result.data?.content?.[0]?.text
@@ -262,6 +273,98 @@ export class AppState {
       privacy: result.headers.get('x-privacy-guard') || 'normal',
       attempt: result.headers.get('x-router-attempt') || '',
       content: typeof content === 'string' ? content : JSON.stringify(content),
+    };
+  }
+
+  async speedTest({ model = 'auto:code' } = {}) {
+    const result = await this.testRoute({
+      model,
+      prompt: '只回复 OK',
+      maxTokens: 8,
+      timeout: 45000,
+    });
+    return { ...result, at: new Date().toISOString() };
+  }
+
+  async usageStats() {
+    const current = path.join(this.layout.logDir, 'router-task.log');
+    const legacy = path.join(this.coreDir || '', 'router.log');
+    const file = fs.existsSync(current) ? current : (fs.existsSync(legacy) ? legacy : '');
+    if (!file) {
+      return {
+        ok: true, date: new Date().toLocaleDateString('en-CA'), total: 0,
+        okCount: 0, errorCount: 0, successRate: 0, avgMs: 0,
+        models: [], tasks: [], hourly: Array(24).fill(0), lastAt: '',
+      };
+    }
+    let text = '';
+    try {
+      const stat = fs.statSync(file);
+      const size = Math.min(stat.size, 4 * 1024 * 1024);
+      const buffer = Buffer.alloc(size);
+      const fd = fs.openSync(file, 'r');
+      try {
+        fs.readSync(fd, buffer, 0, size, Math.max(0, stat.size - size));
+      } finally {
+        fs.closeSync(fd);
+      }
+      text = buffer.toString('utf8');
+    } catch {
+      return { ok: false, error: '无法读取路由日志' };
+    }
+    const today = new Date().toLocaleDateString('en-CA');
+    const hourly = Array(24).fill(0);
+    const models = new Map();
+    const tasks = new Map();
+    let total = 0;
+    let okCount = 0;
+    let errorCount = 0;
+    let msSum = 0;
+    let lastAt = '';
+    for (const line of text.split(/\r?\n/)) {
+      if (!line.trim()) continue;
+      let entry;
+      try {
+        entry = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      const when = new Date(entry.ts || entry.time || '');
+      if (Number.isNaN(when.getTime()) || when.toLocaleDateString('en-CA') !== today) continue;
+      total++;
+      const success = Number(entry.status) > 0 && Number(entry.status) < 400;
+      if (success) okCount++;
+      else errorCount++;
+      msSum += Number(entry.ms) || 0;
+      const hour = when.getHours();
+      hourly[hour] = (hourly[hour] || 0) + 1;
+      lastAt = entry.ts || entry.time || lastAt;
+      const model = String(entry.chosen || entry.requested || '未知');
+      const currentModel = models.get(model) || { id: model, count: 0, ms: 0, errors: 0 };
+      currentModel.count++;
+      currentModel.ms += Number(entry.ms) || 0;
+      if (!success) currentModel.errors++;
+      models.set(model, currentModel);
+      const task = String(entry.task || '通用');
+      const currentTask = tasks.get(task) || { id: task, count: 0 };
+      currentTask.count++;
+      tasks.set(task, currentTask);
+    }
+    return {
+      ok: true,
+      date: today,
+      total,
+      okCount,
+      errorCount,
+      successRate: total ? Math.round(okCount / total * 1000) / 10 : 0,
+      avgMs: total ? Math.round(msSum / total) : 0,
+      models: [...models.values()]
+        .map((item) => ({ ...item, avgMs: item.count ? Math.round(item.ms / item.count) : 0 }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 5),
+      tasks: [...tasks.values()].sort((a, b) => b.count - a.count).slice(0, 5),
+      hourly,
+      lastAt,
     };
   }
 
