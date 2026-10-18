@@ -4,7 +4,7 @@
 
 把原来的浏览器控制台做成桌面软件：开机就能用，一键启动网关与路由，一键写入 Codex / Claude Code / CC Switch / EchoBird / Continue，并把 Key、公网和日志收在同一个窗口里。
 
-当前版本：**0.3.0**。发布包与变更记录见 [GitHub Releases](https://github.com/enmingxiong821-cloud/FreeLLM-console/releases)。
+当前版本：**0.3.1**。发布包与变更记录见 [GitHub Releases](https://github.com/enmingxiong821-cloud/FreeLLM-console/releases)。
 
 ![总览](assets/screenshot-overview.png)
 
@@ -59,8 +59,8 @@ npm run pack:win
 
 输出：
 
-- `dist/FreeLLM-Console-0.3.0-win32-x64/`
-- `dist/FreeLLM-Console-0.3.0-win32-x64.zip`
+- `dist/FreeLLM-Console-0.3.1-win32-x64/`
+- `dist/FreeLLM-Console-0.3.1-win32-x64.zip`
 
 便携版的数据保存在程序目录的 `data/`，整个目录可以拷贝走。包内已经带 `resources/runtime/node.exe`，朋友的电脑不需要另装 Node。
 

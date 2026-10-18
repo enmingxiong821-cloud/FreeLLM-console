@@ -338,7 +338,7 @@ function renderChrome() {
   const live = allRunning();
   const side = $('#sideStatus');
   side.innerHTML = `<span class="dot ${live ? 'ok live' : ''}"></span><div><b>${live ? '网关在线' : '等待启动'}</b><span>${live ? '本机服务正常' : '服务未全部运行'}</span></div>`;
-  $('#sideVersion').textContent = `v${appState.app?.version || '0.3.0'} · ${appState.app?.platform || ''}`;
+  $('#sideVersion').textContent = `v${appState.app?.version || '0.3.1'} · ${appState.app?.platform || ''}`;
   const modelMode = cfg.modelMode === 'manual' ? 'manual' : 'auto';
   const badge = $('#modelBadge');
   badge.textContent = modelMode === 'auto'

@@ -1,5 +1,17 @@
 # 变更记录
 
+## 0.3.1 — 2026-10-18
+
+### 修复
+
+- CI 上的 CC Switch SQLite 测试不再依赖被 gitignore 的 `resources/core`。
+- `better-sqlite3` 加入开发依赖，写入脚本在内置核心缺失时自动回退。
+- Windows、macOS、Linux 三平台 CI 全部通过 24 项测试。
+
+### 文档
+
+- README 增加 GitHub Actions 构建状态徽章。
+
 ## 0.3.0 — 2026-10-18
 
 ### 新增
